@@ -1,0 +1,71 @@
+# ==========================================
+# 1. PYTHON & VIRTUAL ENVIRONMENT
+# ==========================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+.venv/
+env/
+.env_python/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==========================================
+# 2. TOKENS, SECRETS & ENV VARIABLES
+# ==========================================
+.env
+
+# ==========================================
+# 3. PROJECT DATA & ML MODELS
+# ==========================================
+# Ignore files uploaded by user (PDF, Video, Images)
+data/uploads/*
+# Ignore files containing weights/model (YOLO .pt, Whisper, LLM caches)
+data/weights/*
+*.pt
+*.pth
+*.h5
+*.bin
+*.safetensors
+*.onnx
+.huggingface/
+.whisper/
+
+# Keep the empty folders intact so that the project structure remains unchanged when cloned
+!data/uploads/.gitkeep
+!data/weights/.gitkeep
+
+# ==========================================
+# 4. LOGS & DATABASES
+# ==========================================
+*.log
+logs/
+*.sqlite3
+
+# ==========================================
+# 5. TESTING & CACHE
+# ==========================================
+.pytest_cache/
+htmlcov/
+.coverage
+.tox/
+
+# ==========================================
+# 6. OS & IDE SPECIFIC
+# ==========================================
+# MacOS / Windows
+.DS_Store
+Thumbs.db
+
+# VS Code / PyCharm
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter Notebook
+.ipynb_checkpoints
