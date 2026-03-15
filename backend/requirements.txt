@@ -17,12 +17,13 @@ python-jose[cryptography]>=3.3.0
 google-genai>=0.3.0
 networkx>=3.1
 
-# Vision Models (YOLO & Table Transformer)
+# Vision Models (YOLO, Table Transformer & OCR)
 ultralytics>=8.0.0 # YOLOv8
 transformers>=4.33.0
 torch>=2.0.1
 torchvision>=0.15.2
 Pillow>=10.0.0
+pytesseract>=0.3.10
 
 # Audio & Video Models (Scene Detect & Whisper)
 scenedetect[opencv]>=0.6.2

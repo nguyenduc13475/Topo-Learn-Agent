@@ -20,12 +20,12 @@ pip-delete-this-directory.txt
 .env
 
 # ==========================================
-# 3. PROJECT DATA & ML MODELS
+# 3. PROJECT DATA & ML MODELS (UPDATED FOR MONOREPO)
 # ==========================================
-# Ignore files uploaded by user (PDF, Video, Images)
-data/uploads/*
-# Ignore files containing weights/model (YOLO .pt, Whisper, LLM caches)
-data/weights/*
+# Ignore files uploaded by user (PDF, Video, Images) inside backend
+backend/data/uploads/*
+# Ignore files containing weights/model (YOLO .pt, Whisper, LLM caches) inside backend
+backend/data/weights/*
 *.pt
 *.pth
 *.h5
@@ -36,8 +36,8 @@ data/weights/*
 .whisper/
 
 # Keep the empty folders intact so that the project structure remains unchanged when cloned
-!data/uploads/.gitkeep
-!data/weights/.gitkeep
+!backend/data/uploads/.gitkeep
+!backend/data/weights/.gitkeep
 
 # ==========================================
 # 4. LOGS & DATABASES

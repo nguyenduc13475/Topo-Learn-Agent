@@ -1,5 +1,7 @@
+import os
 from typing import List, Dict, Any
 from scenedetect import detect, ContentDetector
+import cv2
 
 
 class VideoSceneSplitter:
@@ -23,16 +25,30 @@ class VideoSceneSplitter:
             start_time = scene[0].get_seconds()
             end_time = scene[1].get_seconds()
 
-            # TODO: Add OpenCV logic here to extract the middle frame (start_time + end_time)/2
-            # and save it to data/uploads/frames/
-            mock_frame_path = f"data/uploads/frames/scene_{i}.jpg"
+            # Extract the middle frame (start_time + end_time)/2 and save it to data/uploads/frames/
+            middle_time_sec = (start_time + end_time) / 2.0
+            keyframe_path = f"data/uploads/frames/scene_{i}.jpg"
+            os.makedirs("data/uploads/frames", exist_ok=True)
+
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            target_frame = int(middle_time_sec * fps)
+
+            cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+            success, frame = cap.read()
+            if success:
+                cv2.imwrite(keyframe_path, frame)
+                print(f"Saved keyframe for scene {i} at {keyframe_path}")
+            else:
+                print(f"Failed to extract frame for scene {i}")
+            cap.release()
 
             results.append(
                 {
                     "scene_id": i,
                     "start_time": start_time,
                     "end_time": end_time,
-                    "keyframe_path": mock_frame_path,
+                    "keyframe_path": keyframe_path,
                 }
             )
 

@@ -1,6 +1,6 @@
 PROJECT STRUCTURE:
 
-smart_learning_backend/
+backend/
 ├── app/
 │   ├── api/                    # Chứa các Router/Endpoints của FastAPI
 │   │   ├── dependencies.py     # Các hàm inject dependency (VD: get_db, get_current_user)
@@ -48,12 +48,16 @@ smart_learning_backend/
 ├── tests/                      # Thư mục viết Unit Test (Pytest)
 │   ├── conftest.py             # Fixtures cho pytest
 │   ├── test_api/               # Test các endpoint
-│   └── test_services/          # Test logic (đặc biệt là test thuật toán SM-2)
+│   └── test_services/          # Test logic
+├── scripts/                    # Thư mục script
+│   ├── train_yolo.py           # Train YOLO
+│   └── download_models.py      # Download YOLO
 ├── .env.example                # File mẫu chứa tên các biến môi trường
 ├── .env                        # File thật chứa tên các biến môi trường
-├── .gitignore                  # Bỏ qua __pycache__, venv, data/uploads, file .env
-├── docker-compose.yml          # Script để spin-up nhanh PostgreSQL và Neo4j
 ├── main.py                     # Entry point khởi chạy FastAPI app
 ├── pyproject.toml              # Quản lý dependencies (nếu dùng Poetry, hoặc dùng requirements.txt)
-├── README.md                   # Giới thiệu kiến trúc, cách cài đặt, cách chạy lệnh
 └── requirements.txt            # Danh sách thư viện (nếu dùng pip)
+frontend/
+.gitignore                      # Bỏ qua __pycache__, venv, data/uploads, file .env
+docker-compose.yml              # Script để spin-up nhanh PostgreSQL và Neo4j
+README.md                       # Giới thiệu kiến trúc, cách cài đặt, cách chạy lệnh

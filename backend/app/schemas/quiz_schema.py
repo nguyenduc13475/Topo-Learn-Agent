@@ -2,10 +2,6 @@ from pydantic import BaseModel
 from typing import List
 
 
-class QuizOption(BaseModel):
-    pass
-
-
 class QuizQuestionResponse(BaseModel):
     question: str
     options: List[str]
@@ -13,7 +9,12 @@ class QuizQuestionResponse(BaseModel):
     explanation: str
 
 
+class AnswerSubmission(BaseModel):
+    question: str
+    user_answer: str
+    correct_answer: str
+
+
 class QuizSubmission(BaseModel):
-    user_id: int
     concept_id: int
-    answers: List[str]  # List of chosen options
+    answers: List[AnswerSubmission]
