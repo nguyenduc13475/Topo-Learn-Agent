@@ -29,7 +29,6 @@ EOF
 
     # Dynamically generate the docker-compose override
     cat << 'EOF' > docker-compose.override.yml
-version: "3.8"
 services:
   worker:
     build:
