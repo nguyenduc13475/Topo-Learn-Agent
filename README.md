@@ -85,8 +85,16 @@ Developed by **Nguyễn Văn Đức**.
    From the root directory, run:
 
    ```bash
-   docker-compose --env-file backend/.env up --build
+   docker compose --profile gpu --env-file backend/.env up
    ```
+
+   if you have gpu on your machine or
+
+   ```bash
+   docker compose --profile cpu --env-file backend/.env up
+   ```
+
+   if you only have cpu.
 
 4. **Access the application:**
    - **Frontend (Web App):** `http://localhost:3000`
