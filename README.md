@@ -69,7 +69,7 @@ Developed by **Nguyễn Văn Đức**.
 
    ```bash
    git clone <your-repo-url>
-   cd topo-learn-agent
+   cd Topo-Learn-Agent
    ```
 
 2. **Configure Environment Variables:**
