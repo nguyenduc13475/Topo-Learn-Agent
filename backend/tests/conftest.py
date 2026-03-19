@@ -2,10 +2,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.db.postgres import Base, get_db
 from main import app
 
-# Use a test database URL (e.g., SQLite in memory or a separate test Postgres DB)
+# Use a test database URL
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 
 engine = create_engine(

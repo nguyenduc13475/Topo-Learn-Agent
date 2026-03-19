@@ -1,8 +1,9 @@
 import re
-from typing import List, Dict
+from typing import Dict, List
+
 from app.ai_modules.llm.gemini_client import gemini_client
 from app.ai_modules.llm.prompts import QUIZ_GENERATION_SYSTEM_PROMPT
-from app.schemas.quiz_schema import AnswerSubmission
+from app.schemas.quiz_schema import AnswerSubmission, QuizList
 
 
 class TutorService:
@@ -22,11 +23,13 @@ class TutorService:
             f"Please generate 3 multiple-choice questions to test the user's understanding."
         )
 
-        quiz_json = gemini_client.generate_json_output(
-            prompt=prompt, system_instruction=QUIZ_GENERATION_SYSTEM_PROMPT
+        quiz_data = gemini_client.generate_structured_output(
+            prompt=prompt,
+            response_schema=QuizList,
+            system_instruction=QUIZ_GENERATION_SYSTEM_PROMPT,
         )
 
-        return quiz_json if isinstance(quiz_json, list) else []
+        return quiz_data.get("questions", []) if isinstance(quiz_data, dict) else []
 
     @staticmethod
     def grade_quiz(submitted_answers: List[AnswerSubmission]) -> int:
@@ -50,10 +53,11 @@ class TutorService:
             user_ans = normalize_text(ans.user_answer)
             correct_ans = normalize_text(ans.correct_answer)
 
+            # Prevent short generic strings from getting lucky substring matches
             if (
                 user_ans == correct_ans
-                or user_ans in correct_ans
-                or correct_ans in user_ans
+                or (len(user_ans) > 3 and user_ans in correct_ans)
+                or (len(correct_ans) > 3 and correct_ans in user_ans)
             ):
                 correct_count += 1
             else:

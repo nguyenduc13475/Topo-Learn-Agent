@@ -32,6 +32,9 @@ def calculate_sm2(
             new_interval = 6
         else:
             new_interval = round(previous_interval * new_ef)
+            # Prevent interval stagnation when EF is extremely low
+            if new_interval <= previous_interval:
+                new_interval = previous_interval + 1
 
     return {
         "repetitions": new_repetitions,

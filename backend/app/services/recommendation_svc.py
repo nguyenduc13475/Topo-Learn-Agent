@@ -1,9 +1,11 @@
-from sqlalchemy.orm import Session
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+from sqlalchemy.orm import Session
+
 from app.db.neo4j import neo4j_conn
-from app.models.sm2_progress import SM2Progress
 from app.models.document import Concept
+from app.models.sm2_progress import SM2Progress
 
 
 class RecommendationService:
@@ -19,7 +21,8 @@ class RecommendationService:
             f"Calculating next concept for user {user_id} in document {document_id}..."
         )
 
-        # 1. Check Postgres for concepts that are due for review (Spaced Repetition priority)
+        # 1. Check Postgres for concepts that are due for review (Spaced
+        #    Repetition priority)
         current_time = datetime.now(timezone.utc)
         due_progress = (
             db.query(SM2Progress)
@@ -49,63 +52,50 @@ class RecommendationService:
 
         # 2. Query Neo4j to find the next unlearned concept in the Dependency Graph
         session = neo4j_conn.get_session()
-        unlearned_concept_name = None
+        unlearned_concept_id = None
         try:
-            # Cypher Query Logic (Production):
-            # 1. Find all concepts in this document.
-            # 2. Filter out concepts the user has already learned.
-            # 3. Find their prerequisite concepts.
-            # 4. Only select concepts where ALL their prerequisites exist in the 'learned_concepts' list (or they have no prerequisites).
-            query = """
-            MATCH (target:Concept {document_id: $doc_id})
-            WHERE NOT target.name IN $learned_concepts
-            OPTIONAL MATCH (prereq:Concept)-[:REQUIRES]->(target)
-            WITH target, collect(prereq.name) AS prerequisites
-            // prerequisites = [null] means it has no prerequisites (root node)
-            WHERE prerequisites = [null] OR all(p IN prerequisites WHERE p IN $learned_concepts)
-            RETURN target.name AS concept_name
-            ORDER BY size(prerequisites) ASC
-            LIMIT 1
-            """
-
-            # Fetch learned concepts from Postgres
+            # We strictly check for repetition > 0 to ensure they actually passed a quiz
             learned_records = (
                 db.query(Concept)
                 .join(SM2Progress)
                 .filter(
-                    SM2Progress.user_id == user_id, Concept.document_id == document_id
+                    SM2Progress.user_id == user_id,
+                    Concept.document_id == document_id,
+                    SM2Progress.repetitions > 0,
+                    SM2Progress.easiness_factor >= 1.3,
                 )
                 .all()
             )
-            learned_concepts = [c.name for c in learned_records]
-            print(f"User has learned {len(learned_concepts)} concepts so far.")
+            learned_concept_ids = [c.id for c in learned_records]
 
+            # Use Integer IDs for absolute accuracy
+            query = """
+            MATCH (target:Concept {document_id: $doc_id})
+            WHERE NOT target.id IN $learned_concept_ids
+            OPTIONAL MATCH (prereq:Concept)-[:IS_PREREQUISITE_OF]->(target)
+            WITH target, collect(prereq.id) AS prerequisites
+            WHERE size(prerequisites) = 0 
+               OR all(p IN prerequisites WHERE p IN $learned_concept_ids)
+            RETURN target.id AS concept_id
+            ORDER BY size(prerequisites) ASC
+            LIMIT 1
+            """
             result = session.run(
-                query, doc_id=document_id, learned_concepts=learned_concepts
+                query, doc_id=document_id, learned_concept_ids=learned_concept_ids
             )
             record = result.single()
 
             if record:
-                unlearned_concept_name = record["concept_name"]
-                print(f"Next optimal concept found in Graph: {unlearned_concept_name}")
-            else:
-                print(
-                    "No unlearned concepts with fulfilled prerequisites found. Course might be completed."
-                )
+                unlearned_concept_id = record["concept_id"]
         except Exception as e:
             print(f"Error querying Knowledge Graph: {e}")
         finally:
             session.close()
 
         # 3. Fetch from Postgres and return
-        if unlearned_concept_name:
+        if unlearned_concept_id:
             next_concept = (
-                db.query(Concept)
-                .filter(
-                    Concept.name == unlearned_concept_name,
-                    Concept.document_id == document_id,
-                )
-                .first()
+                db.query(Concept).filter(Concept.id == unlearned_concept_id).first()
             )
             if next_concept:
                 return {

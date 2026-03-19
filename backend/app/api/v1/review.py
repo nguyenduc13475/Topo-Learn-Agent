@@ -1,18 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
-from app.api.dependencies import get_db, get_current_user
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.api.dependencies import get_current_user, get_db
 from app.models.sm2_progress import SM2Progress
-from app.services.sm2_svc import calculate_sm2
 from app.services.recommendation_svc import RecommendationService
+from app.services.sm2_svc import calculate_sm2
 
 router = APIRouter()
+
+
+class ReviewSubmit(BaseModel):
+    quality_score: int
 
 
 @router.post("/{concept_id}/update")
 def update_review_progress(
     concept_id: int,
-    quality_score: int,  # Score from 0 to 5
+    payload: ReviewSubmit,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -40,7 +47,7 @@ def update_review_progress(
     # Calculate new SM-2 parameters
     try:
         sm2_results = calculate_sm2(
-            quality_response=quality_score,
+            quality_response=payload.quality_score,
             repetitions=progress.repetitions,
             previous_interval=progress.interval,
             previous_ef=progress.easiness_factor,

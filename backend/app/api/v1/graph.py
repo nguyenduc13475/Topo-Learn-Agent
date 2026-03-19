@@ -1,84 +1,160 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.api.dependencies import get_db
-from app.models.document import Document, Concept
-from app.services.graph_svc import GraphService
-from app.services.ingestion_svc import IngestionService
-from app.schemas.graph_schema import GraphBuildResponse
+
+from app.api.dependencies import get_current_user, get_db
+from app.db.neo4j import neo4j_conn
+from app.models.document import Concept, Document
+from app.models.sm2_progress import SM2Progress
+from app.services.graph_tasks import build_knowledge_graph_task
 
 router = APIRouter()
 
 
-@router.post("/{document_id}/build", response_model=GraphBuildResponse)
-def build_knowledge_graph(document_id: int, db: Session = Depends(get_db)):
+@router.post("/{document_id}/build")
+def trigger_knowledge_graph_build(document_id: int, db: Session = Depends(get_db)):
     """
-    Trigger the extraction of concepts and dependencies from a specific document,
-    then save the structure to Neo4j and Postgres.
+    Trigger the background extraction of concepts and dependencies.
     """
-    print(f"Starting knowledge graph build for document ID: {document_id}")
-
-    # 1. Fetch document from Postgres
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    if not document.content_text:
-        raise HTTPException(status_code=400, detail="Document content is empty")
-
-    # 2. Chunk the entire document to respect LLM context limits
-    print("Chunking document text for AI processing...")
-    chunks = IngestionService.chunk_text(document.content_text, chunk_size=1000)
-    all_concepts_data = []
-
-    # Process each chunk sequentially
-    for index, chunk in enumerate(chunks):
-        print(f"Extracting concepts from chunk {index + 1}/{len(chunks)}...")
-        concepts_data = GraphService.extract_concepts_from_chunk(chunk)
-        if concepts_data:
-            all_concepts_data.extend(concepts_data)
-
-    if not all_concepts_data:
+    if document.status != "completed":
         raise HTTPException(
-            status_code=500,
-            detail="Failed to extract concepts via AI from the document.",
+            status_code=400, detail="Document ingestion is not complete yet."
         )
 
-    # 3. Save Concepts to Postgres and deduplicate
-    print("Deduplicating and saving concepts to Postgres...")
-    seen_concept_names = set()
-    saved_concepts = []
+    if document.graph_status == "building":
+        return {"message": "Graph is already building", "status": "building"}
 
-    for c_data in all_concepts_data:
-        c_name = c_data.get("concept", "Unknown").strip()
+    # Trigger Celery Task
+    build_knowledge_graph_task.delay(document_id)
 
-        # Skip empty names or duplicates
-        if c_name not in seen_concept_names and c_name != "Unknown" and c_name:
-            new_concept = Concept(
-                document_id=document.id,
-                name=c_name,
-                definition=c_data.get("definition", ""),
-                context_index=c_data.get("context_index", ""),
-            )
-            db.add(new_concept)
-            saved_concepts.append(new_concept)
-            seen_concept_names.add(c_name)
-
+    document.graph_status = "building"
     db.commit()
-    print(f"Saved {len(saved_concepts)} unique concepts to Database.")
 
-    # 4. Resolve Dependencies via AI using the unique list
-    concept_names = [c.name for c in saved_concepts]
-    dependencies = GraphService.resolve_dependencies(concept_names)
+    return {"message": "Graph build triggered successfully", "status": "building"}
 
-    # 5. Save to Neo4j and sort topologically
-    GraphService.save_concepts_to_neo4j(document_id, dependencies)
-    topological_order = GraphService.build_and_sort_graph(dependencies)
 
-    print("Knowledge Graph build completed successfully.")
+@router.get("/{document_id}/status")
+def get_graph_status(document_id: int, db: Session = Depends(get_db)):
+    """Check the status of the graph building process."""
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"status": document.graph_status}
 
-    return GraphBuildResponse(
-        message="Graph built successfully",
-        total_concepts=len(saved_concepts),
-        dependencies_found=len(dependencies),
-        topological_order=topological_order,
+
+@router.get("/concepts/{concept_id}")
+def get_concept_details(
+    concept_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Fetch concept details for the learning page."""
+    concept = (
+        db.query(Concept)
+        .join(Document)
+        .filter(Concept.id == concept_id, Document.user_id == current_user["user_id"])
+        .first()
     )
+
+    if not concept:
+        raise HTTPException(status_code=404, detail="Concept not found")
+
+    return {
+        "id": concept.id,
+        "name": concept.name,
+        "definition": concept.definition,
+        "context_index": concept.context_index,
+        "document_id": concept.document_id,
+        "file_url": concept.document.file_url,
+        "file_type": concept.document.file_type,
+    }
+
+
+@router.get("/{document_id}/flow")
+def get_knowledge_graph_flow(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Fetch nodes and edges formatted for React Flow."""
+    # Verify ownership
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.user_id == current_user["user_id"])
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    # 1. Get all concepts from Postgres (to get definitions and IDs)
+    concepts = db.query(Concept).filter(Concept.document_id == document_id).all()
+    concept_map = {c.id: {"id": c.id, "name": c.name} for c in concepts}
+
+    # Fetch user's learned progress
+    progress_records = (
+        db.query(SM2Progress)
+        .filter(
+            SM2Progress.user_id == current_user["user_id"],
+            SM2Progress.concept_id.in_([c.id for c in concepts]),
+        )
+        .all()
+    )
+    mastered_ids = [
+        p.concept_id
+        for p in progress_records
+        if p.easiness_factor > 1.3 and p.repetitions > 0
+    ]
+
+    # 2. Query Neo4j for edges & Calculate Prerequisite Map
+    session = neo4j_conn.get_session()
+    edges = []
+    prereqs_map = {c.id: [] for c in concepts}
+    try:
+        query = """
+        MATCH (s:Concept {document_id: $doc_id})-[:IS_PREREQUISITE_OF]->(t:Concept {document_id: $doc_id})
+        RETURN s.id AS source_id, t.id AS target_id
+        """
+        result = session.run(query, doc_id=document_id)
+        for record in result:
+            source_id = record["source_id"]
+            target_id = record["target_id"]
+            if source_id in concept_map and target_id in concept_map:
+                prereqs_map[target_id].append(source_id)
+                edges.append(
+                    {
+                        "id": f"e{source_id}-{target_id}",
+                        "source": str(source_id),
+                        "target": str(target_id),
+                        "animated": True,
+                    }
+                )
+    finally:
+        session.close()
+
+    # 3. Format Nodes for React Flow (Enforcing Dependencies)
+    nodes = []
+    for c in concepts:
+        if c.id in mastered_ids:
+            status = "completed"
+        else:
+            # A node is 'current' (unlocked) ONLY if ALL of its strict
+            # prerequisites are mastered
+            my_prereqs = prereqs_map.get(c.id, [])
+            if all(p in mastered_ids for p in my_prereqs):
+                status = "current"
+            else:
+                status = "locked"
+
+        nodes.append(
+            {
+                "id": str(c.id),
+                "type": "concept",
+                "position": {"x": 0, "y": 0},
+                "data": {"label": c.name, "status": status},
+            }
+        )
+
+    return {"nodes": nodes, "edges": edges}
