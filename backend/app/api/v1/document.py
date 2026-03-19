@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db
 from app.core.celery_app import celery_app
+from app.core.rate_limit import limiter
 from app.db.neo4j import neo4j_conn
 from app.models.document import Document
 from app.services.ingestion_svc import process_document_task
 from app.services.s3_svc import s3_service
-from main import limiter
 
 router = APIRouter()
 UPLOAD_DIR = "data/uploads"

@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.ai_modules.llm.gemini_client import gemini_client
 from app.api.dependencies import get_current_user, get_db
+from app.core.rate_limit import limiter
 from app.models.document import Concept, Document
 from app.models.sm2_progress import SM2Progress
 from app.schemas.quiz_schema import QuizQuestionResponse, QuizSubmission
 from app.services.sm2_svc import calculate_sm2
 from app.services.tutor_svc import TutorService
-from main import limiter
 
 router = APIRouter()
 
