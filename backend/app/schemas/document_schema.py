@@ -1,5 +1,7 @@
-from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict
 
 
 class DocumentBase(BaseModel):
@@ -13,7 +15,6 @@ class DocumentCreate(DocumentBase):
 
 class DocumentResponse(DocumentBase):
     id: int
+    file_url: Optional[str] = None
     uploaded_at: datetime
-
-    class Config:
-        from_attributes = True  # Allow ORM mapping
+    model_config = ConfigDict(from_attributes=True)

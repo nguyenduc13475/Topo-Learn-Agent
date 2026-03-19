@@ -1,15 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from app.api.dependencies import get_db
+from pydantic import BaseModel, ConfigDict, EmailStr
+from sqlalchemy.orm import Session
+
+from app.api.dependencies import get_current_user, get_db
+from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.user import User
-from app.core.security import verify_password, get_password_hash, create_access_token
-from pydantic import BaseModel, EmailStr
+from main import limiter
 
 router = APIRouter()
 
 
-# --- Schemas ---
+# Schemas
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -21,7 +23,14 @@ class Token(BaseModel):
     token_type: str
 
 
-# --- Endpoints ---
+class UserProfile(BaseModel):
+    id: int
+    email: EmailStr
+    full_name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Endpoints
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     """Register a new user."""
@@ -49,8 +58,11 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("10/minute")
 def login_access_token(
-    db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
+    request: Request,
+    db: Session = Depends(get_db),
+    form_data: OAuth2PasswordRequestForm = Depends(),
 ):
     """OAuth2 compatible token login, get an access token for future requests."""
     print(f"User attempting to login: {form_data.username}")
@@ -61,3 +73,14 @@ def login_access_token(
 
     access_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/me", response_model=UserProfile)
+def read_users_me(
+    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
+):
+    """Fetch the current authenticated user's profile."""
+    user = db.query(User).filter(User.id == current_user["user_id"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user

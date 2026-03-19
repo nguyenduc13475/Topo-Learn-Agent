@@ -1,5 +1,6 @@
-from pydantic import BaseModel
 from typing import List
+
+from pydantic import BaseModel
 
 
 class QuizQuestionResponse(BaseModel):
@@ -18,3 +19,7 @@ class AnswerSubmission(BaseModel):
 class QuizSubmission(BaseModel):
     concept_id: int
     answers: List[AnswerSubmission]
+
+
+class QuizList(BaseModel):
+    questions: List[QuizQuestionResponse]

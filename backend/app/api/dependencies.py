@@ -2,12 +2,13 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-from app.db.postgres import SessionLocal
-from app.core.config import settings
-from app.models.user import User
-from app.core.exceptions import CredentialsException
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+from app.core.config import settings
+from app.core.exceptions import CredentialsException
+from app.db.postgres import SessionLocal
+from app.models.user import User
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 def get_db():
@@ -17,6 +18,9 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

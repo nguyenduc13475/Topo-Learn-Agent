@@ -1,5 +1,6 @@
-from pydantic import BaseModel
 from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict
 
 
 class ConceptBase(BaseModel):
@@ -11,9 +12,9 @@ class ConceptBase(BaseModel):
 class ConceptResponse(ConceptBase):
     id: int
     document_id: int
-
-    class Config:
-        from_attributes = True
+    file_url: Optional[str] = None
+    file_type: Optional[str] = None  # FOR MORE INFORMATION ON USING <video> OR <iframe>
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DependencySchema(BaseModel):
