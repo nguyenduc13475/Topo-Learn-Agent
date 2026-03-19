@@ -85,13 +85,13 @@ Developed by **Nguyễn Văn Đức**.
    From the root directory, run:
 
    ```bash
-   docker compose --profile gpu --env-file backend/.env up
+   docker compose --profile gpu --env-file backend/.env up --build
    ```
 
    if you have gpu on your machine or
 
    ```bash
-   docker compose --profile cpu --env-file backend/.env up
+   docker compose --profile cpu --env-file backend/.env up --build
    ```
 
    if you only have cpu.
