@@ -47,11 +47,12 @@ services:
       - redis
     restart: always
 
-  worker:
+  worker-gpu:
+    profiles: ["gpu"]
     build:
       context: ./backend
       dockerfile: worker.Dockerfile
-    container_name: topo_worker_prod
+    container_name: topo_worker_gpu_prod
     # Concurrency set to 2 to prevent VRAM Out-Of-Memory errors when multiple large models load simultaneously
     command: celery -A app.core.celery_app worker --loglevel=info -c 2
     deploy:
@@ -61,6 +62,24 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./backend/data:/app/data
+    depends_on:
+      - redis
+    restart: always
+
+  worker-cpu:
+    profiles: ["cpu"]
+    build:
+      context: ./backend
+      dockerfile: worker.cpu.Dockerfile
+    container_name: topo_worker_cpu_prod
+    # Concurrency set to 2 to prevent VRAM Out-Of-Memory errors when multiple large models load simultaneously
+    command: celery -A app.core.celery_app worker --loglevel=info -c 2
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - CELERY_BROKER_URL=redis://redis:6379/0
