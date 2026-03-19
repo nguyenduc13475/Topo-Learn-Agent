@@ -110,12 +110,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=https://8000-01km412b3hffw3bchqprqgjrgv.cloudspaces.litng.ai/api/v1
+        - NEXT_PUBLIC_API_URL=https://8000-01km44bj3vt5kjfg5mds7gepwj.cloudspaces.litng.ai/api/v1
     container_name: topo_frontend
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=https://8000-01km412b3hffw3bchqprqgjrgv.cloudspaces.litng.ai/api/v1
+      - NEXT_PUBLIC_API_URL=https://8000-01km44bj3vt5kjfg5mds7gepwj.cloudspaces.litng.ai/api/v1
     depends_on:
       - backend
     restart: always

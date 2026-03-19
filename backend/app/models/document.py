@@ -5,6 +5,8 @@ from sqlalchemy.orm import relationship
 
 from app.db.postgres import Base
 
+from .user import User
+
 
 class Document(Base):
     __tablename__ = "documents"
@@ -29,7 +31,7 @@ class Document(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    user = relationship("User")
+    user = relationship(User)
     concepts = relationship(
         "Concept", back_populates="document", cascade="all, delete-orphan"
     )

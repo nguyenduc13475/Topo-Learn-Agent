@@ -34,3 +34,4 @@ boto3>=1.28.0
 docling>=2.5.0
 faster-whisper>=1.0.0
 scenedetect[opencv]>=0.6.3
+easyocr>=1.7.1

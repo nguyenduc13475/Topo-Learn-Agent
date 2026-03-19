@@ -9,6 +9,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+import app.models
 from app.api.router import api_router
 from app.api.v1.ws import router as ws_router
 from app.core.config import settings
