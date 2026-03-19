@@ -1,3 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { apiClient } from "@/lib/api-client";
@@ -26,7 +31,6 @@ export const useAuth = create<AuthState>()(
 
       setToken: (token: string) => {
         set({ token, isAuthenticated: true });
-        // Fetch user profile immediately after setting token
         get().fetchUser();
       },
 
@@ -36,7 +40,7 @@ export const useAuth = create<AuthState>()(
           set({ user: userData });
         } catch (error) {
           console.error("[AuthStore] Failed to fetch user profile", error);
-          get().logout(); // Token might be invalid
+          get().logout();
         }
       },
 
@@ -49,3 +53,35 @@ export const useAuth = create<AuthState>()(
     },
   ),
 );
+
+export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { token, user, fetchUser } = useAuth();
+  const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    if (!token) {
+      router.push("/login");
+    } else if (!user) {
+      fetchUser().finally(() => {
+        setTimeout(() => setIsChecking(false), 0);
+      });
+    } else {
+      const timer = setTimeout(() => {
+        setIsChecking(false);
+      }, 0);
+
+      return () => clearTimeout(timer);
+    }
+  }, [token, user, router, fetchUser]);
+
+  if (isChecking || !token) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-secondary/30">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
