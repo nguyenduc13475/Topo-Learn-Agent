@@ -1,131 +1,364 @@
+import concurrent.futures
+import json
 import os
+import tempfile
 from typing import List
-from pdf2image import convert_from_path
-import pytesseract
-from app.ai_modules.audio.scene_split import VideoSceneSplitter
-from app.ai_modules.audio.whisper_asr import WhisperASR
-from app.ai_modules.vision.yolo_layout import YoloLayoutAnalyzer
-from app.ai_modules.vision.table_tf import TableTransformerModule
+
+import cv2
+import redis
+import torch
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import EasyOcrOptions, PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from faster_whisper import WhisperModel
+from scenedetect import ContentDetector, detect
+
 from app.ai_modules.llm.gemini_client import gemini_client
+from app.core.celery_app import celery_app
+from app.core.config import settings
+from app.db.postgres import SessionLocal
+from app.models.document import Document
+from app.services.s3_svc import s3_service
 
 
 class IngestionService:
+    """
+    Utility class for text manipulation and ML model caching.
+    Kept here because other services (like GraphService) depend on it.
+    """
+
+    _whisper_model = None
+    _doc_converter = None
+
+    @classmethod
+    def get_whisper_model(cls):
+        if cls._whisper_model is None:
+            print("[ML Cache] Initializing WhisperModel into VRAM...")
+            # Dynamically detect hardware. This is safe for production (uses
+            # GPU) AND safe for local testing (likely uses CPU).
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            compute_type = "float16" if device == "cuda" else "int8"
+
+            cls._whisper_model = WhisperModel(
+                "small", device=device, compute_type=compute_type
+            )
+        return cls._whisper_model
+
+    @classmethod
+    def get_doc_converter(cls):
+        if cls._doc_converter is None:
+            print("[ML Cache] Initializing Docling Converter into RAM...")
+            pipeline_options = PdfPipelineOptions()
+            pipeline_options.do_ocr = True
+            pipeline_options.generate_picture_images = True
+            pipeline_options.ocr_options = EasyOcrOptions(lang=["en", "vi"])
+            cls._doc_converter = DocumentConverter(
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+                }
+            )
+        return cls._doc_converter
+
     @staticmethod
-    def chunk_text(text: str, chunk_size: int = 1000) -> List[str]:
+    def chunk_text(text: str, max_words_per_chunk: int = 4000) -> List[str]:
         """
-        Split a large text string into smaller chunks by tokens or words.
+        Smart Chunking for Markdown: Splits the document primarily by Markdown headers.
+        Forces a split at the nearest paragraph if a section exceeds max_words_per_chunk.
         """
-        words = text.split()
-        return [
-            " ".join(words[i : i + chunk_size])
-            for i in range(0, len(words), chunk_size)
+        print("[IngestionService] Starting smart semantic Markdown chunking...")
+
+        blocks = text.split("\n\n")
+        chunks = []
+        current_chunk_blocks = []
+        current_word_count = 0
+
+        for block in blocks:
+            block = block.strip()
+            if not block:
+                continue
+
+            block_word_count = len(block.split())
+
+            # Check if block is a Markdown header (e.g., "# Title", "## Section")
+            is_title = (
+                block.startswith("# ")
+                or block.startswith("## ")
+                or block.startswith("### ")
+            )
+            is_too_long = (current_word_count + block_word_count) > max_words_per_chunk
+
+            if (is_title or is_too_long) and current_chunk_blocks:
+                chunks.append("\n\n".join(current_chunk_blocks))
+                current_chunk_blocks = []
+                current_word_count = 0
+
+            current_chunk_blocks.append(block)
+            current_word_count += block_word_count
+
+        if current_chunk_blocks:
+            chunks.append("\n\n".join(current_chunk_blocks))
+
+        print(f"[IngestionService] Document split into {len(chunks)} semantic chunks.")
+        return chunks
+
+
+redis_client = redis.from_url(settings.CELERY_BROKER_URL)
+
+
+def publish_event(user_id: int, event_type: str, payload: dict):
+    """Hàm bắn event về WebSocket thông qua Redis PubSub"""
+    message = {"user_id": user_id, "event": event_type, "payload": payload}
+    redis_client.publish("user_notifications", json.dumps(message))
+
+
+@celery_app.task(bind=True, name="process_document_task")
+def process_document_task(self, document_id: int, file_path: str):
+    """
+    Background Celery task to process PDF or Video.
+    Runs in a separate worker process to avoid blocking the FastAPI server.
+    """
+    print(f"[Celery Worker] Started processing document ID: {document_id}")
+    db = SessionLocal()
+
+    # Fetch the pending document
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        print(f"[Celery Worker] Error: Document {document_id} not found in DB.")
+        db.close()
+        return
+
+    try:
+        content_text = ""
+
+        # Upload the file to S3 first
+        print("[Celery Worker] Uploading file to S3...")
+        s3_url = s3_service.upload_file(file_path, document.file_type)
+
+        # Route to the correct processing logic based on file type
+        if document.file_type == "pdf":
+            content_text = _process_pdf_logic(file_path)
+        elif document.file_type == "video":
+            content_text = _process_video_logic(file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {document.file_type}")
+
+        # Update DB successfully
+        document.content_text = content_text
+        document.file_url = s3_url
+        document.status = "completed"
+        db.commit()
+        print(f"[Celery Worker] Document {document_id} processed successfully.")
+
+        # Shoot the Ingestion event
+        publish_event(
+            user_id=document.user_id,
+            event_type="DOCUMENT_STATUS_UPDATED",
+            payload={"document_id": document.id, "status": "completed"},
+        )
+
+    except Exception as e:
+        print(f"[Celery Worker] Fatal Error processing document {document_id}: {e}")
+        db.rollback()
+        document.status = "failed"
+        document.error_message = str(e)
+        db.commit()
+        publish_event(
+            user_id=document.user_id,
+            event_type="DOCUMENT_STATUS_UPDATED",
+            payload={"document_id": document.id, "status": "failed", "error": str(e)},
+        )
+
+    finally:
+        db.close()
+        # Clean up local file to save disk space after processing is done
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(
+                f"[Celery Worker] Cleaned up local temporary file: {file_path}. Backend storage remains empty."
+            )
+
+
+def _process_pdf_logic(file_path: str) -> str:
+    print(f"[_process_pdf_logic] Running Docling on {file_path}...")
+
+    # 1. Retrieve cached Docling Pipeline
+    doc_converter = IngestionService.get_doc_converter()
+
+    # 2. Execute Conversion
+    conv_result = doc_converter.convert(file_path)
+    doc = conv_result.document
+
+    document_flow = []
+
+    # 3. Process items in reading order & parallelize Vision calls
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            for item, _ in doc.iterate_items():
+                # Duck-typing is safer than checking type(item).__name__ across
+                # Docling versions
+                if hasattr(item, "get_image") and item.label == "picture":
+                    try:
+                        pil_img = item.get_image(doc)
+                        if pil_img:
+                            img_path = os.path.join(temp_dir, f"img_{id(item)}.jpg")
+                            pil_img.convert("RGB").save(img_path, format="JPEG")
+
+                            # Enhanced Prompt: Force extraction of internal
+                            # text/diagram labels
+                            prompt = (
+                                "Analyze this academic image, chart, or diagram. "
+                                "Provide a highly detailed explanation of its core concepts. "
+                                "CRITICAL: If there is any text, formula, or table visible inside the image, transcribe it accurately."
+                            )
+                            future = executor.submit(
+                                gemini_client.describe_image, img_path, prompt
+                            )
+                            document_flow.append({"type": "image", "future": future})
+                    except Exception as e:
+                        print(f"[_process_pdf_logic] Failed to queue image: {e}")
+
+                elif hasattr(item, "export_to_markdown") and item.label == "table":
+                    document_flow.append(
+                        {
+                            "type": "text",
+                            "content": f"\n\n{item.export_to_markdown()}\n\n",
+                        }
+                    )
+                else:
+                    # Standard text, paragraphs, and headings
+                    if hasattr(item, "export_to_markdown"):
+                        document_flow.append(
+                            {"type": "text", "content": item.export_to_markdown()}
+                        )
+                    elif hasattr(item, "text"):
+                        document_flow.append({"type": "text", "content": item.text})
+
+            # 4. Resolve futures and assemble the final markdown. MOVED INSIDE
+            # the ThreadPool/TempDir block to prevent FileNotFoundError race
+            # conditions
+            final_md_parts = []
+            for flow_item in document_flow:
+                if flow_item["type"] == "text":
+                    final_md_parts.append(flow_item["content"])
+                elif flow_item["type"] == "image":
+                    try:
+                        # This blocks until the specific thread finishes
+                        caption = flow_item["future"].result()
+                        final_md_parts.append(
+                            f"\n\n> **[Extracted Image/Diagram]**: {caption}\n\n"
+                        )
+                    except Exception as e:
+                        print(
+                            f"[_process_pdf_logic] Gemini Vision failed for an image: {e}"
+                        )
+
+    return "\n".join(final_md_parts)
+
+
+def _process_video_logic(file_path: str) -> str:
+    print(
+        f"[_process_video_logic] Extracting transcript and scenes from {file_path}..."
+    )
+
+    # 1. Transcribe Audio (Strictly enforce CUDA & fp16 for your GPU)
+    print("Running faster-whisper on GPU...")
+    # Use cached global model to prevent VRAM memory leaks
+    model = IngestionService.get_whisper_model()
+    segments, _ = model.transcribe(file_path, beam_size=5)
+
+    transcript_data = [
+        {"start": s.start, "end": s.end, "text": s.text} for s in segments
+    ]
+
+    # 2. Detect Scenes using PySceneDetect
+    print("Running PySceneDetect...")
+    scene_list = detect(file_path, ContentDetector(threshold=27.0))
+
+    # 3. Extract middle frame for each scene and get Gemini description
+    cap = cv2.VideoCapture(file_path)
+    scenes_data = []
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            futures_data = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                for i, scene in enumerate(scene_list):
+                    start_frame = scene[0].get_frames()
+                    end_frame = scene[1].get_frames()
+                    mid_frame = start_frame + (end_frame - start_frame) // 2
+
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, mid_frame)
+                    ret, frame = cap.read()
+
+                    if ret:
+                        frame_path = os.path.join(temp_dir, f"scene_{i}.jpg")
+                        cv2.imwrite(frame_path, frame)
+
+                        print(
+                            f"[_process_video_logic] Queuing scene {i + 1} for description..."
+                        )
+                        future = executor.submit(
+                            gemini_client.describe_image,
+                            frame_path,
+                            "Describe the educational content of this presentation slide or video frame. Extract any bullet points, titles, or diagrams visible.",
+                        )
+                        futures_data.append(
+                            {
+                                "start_time": scene[0].get_seconds(),
+                                "end_time": scene[1].get_seconds(),
+                                "future": future,
+                            }
+                        )
+
+                # Resolve all threads before the temp_dir is destroyed
+                for data in futures_data:
+                    try:
+                        caption = data["future"].result()
+                        scenes_data.append(
+                            {
+                                "start_time": data["start_time"],
+                                "end_time": data["end_time"],
+                                "caption": caption,
+                            }
+                        )
+                    except Exception as e:
+                        print(f"[_process_video_logic] Failed to describe scene: {e}")
+    finally:
+        # Guarantee memory release to prevent OpenCV memory leaks in Celery workers
+        cap.release()
+
+    # 4. Interleave scenes with their corresponding transcripts
+    final_text = []
+
+    # CRITICAL: Fallback for videos with no scene changes (static visual)
+    if not scenes_data:
+        final_text.append("\n## Video Content (No Scene Changes Detected)")
+        full_transcript = " ".join([t["text"] for t in transcript_data])
+        final_text.append(
+            full_transcript if full_transcript else "*(No dialogue detected)*"
+        )
+        return "\n".join(final_text)
+
+    for i, scene in enumerate(scenes_data):
+        final_text.append(
+            f"\n## Scene {i + 1} (Timestamp: {scene['start_time']:.2f}s - {scene['end_time']:.2f}s)"
+        )
+        final_text.append(f"> **[Visual Content]**: {scene['caption']}\n")
+
+        # Match transcripts overlapping this scene
+        scene_transcripts = [
+            t["text"]
+            for t in transcript_data
+            if (
+                (t["start"] >= scene["start_time"] and t["start"] < scene["end_time"])
+                or (t["end"] > scene["start_time"] and t["end"] <= scene["end_time"])
+                or (t["start"] <= scene["start_time"] and t["end"] >= scene["end_time"])
+            )
         ]
 
-    @staticmethod
-    def process_pdf_document(file_path: str) -> str:
-        """
-        Pipeline to process PDF: PDF to Image -> YOLO layout -> OCR/Table TF/Gemini Vision.
-        Returns a single concatenated string.
-        """
-        print(f"Starting PDF processing pipeline for: {file_path}")
+        if scene_transcripts:
+            final_text.append(" ".join(scene_transcripts).strip())
+        else:
+            final_text.append("*(No dialogue in this segment)*")
 
-        yolo_analyzer = YoloLayoutAnalyzer()
-        table_transformer = TableTransformerModule()
-
-        final_document_text = []
-
-        try:
-            # 1. Convert PDF to list of images (one per page)
-            print("Converting PDF pages to images...")
-            pages = convert_from_path(file_path, 200)  # 200 DPI
-            os.makedirs("data/uploads/temp", exist_ok=True)
-
-            for page_num, page_image in enumerate(pages):
-                page_img_path = f"data/uploads/temp/page_{page_num}.jpg"
-                page_image.save(page_img_path, "JPEG")
-
-                # 2. Analyze Layout with YOLO
-                elements = yolo_analyzer.analyze_pdf_page(page_img_path)
-                print(f"Found {len(elements)} elements on page {page_num + 1}.")
-
-                for idx, element in enumerate(elements):
-                    label = element["label"]
-                    bbox = element["bbox"]
-
-                    # Crop the element from the page image
-                    cropped_img = page_image.crop((bbox[0], bbox[1], bbox[2], bbox[3]))
-                    crop_path = f"data/uploads/temp/crop_{page_num}_{idx}.jpg"
-                    cropped_img.save(crop_path, "JPEG")
-
-                    # 3. Process based on Label
-                    if label in ["Text", "Title"]:
-                        # Extract real text using Tesseract OCR
-                        print(f"Extracting text via OCR for element {idx}...")
-                        extracted_text = pytesseract.image_to_string(
-                            cropped_img
-                        ).strip()
-                        if extracted_text:
-                            final_document_text.append(f"[{label}]: {extracted_text}")
-
-                    elif label == "Table":
-                        print(f"Extracting table structure for element {idx}...")
-                        table_md = table_transformer.extract_table_to_markdown(
-                            crop_path
-                        )
-                        final_document_text.append(f"[Table]:\n{table_md}")
-
-                    elif label == "Figure":
-                        print(f"Extracting figure description for element {idx}...")
-                        figure_desc = gemini_client.describe_image(
-                            image_path=crop_path,
-                            prompt="Describe this academic figure in detail.",
-                        )
-                        final_document_text.append(
-                            f"[Figure Description]: {figure_desc}"
-                        )
-
-            print("PDF processing completed successfully.")
-            return "\n\n".join(final_document_text)
-
-        except Exception as e:
-            print(f"Error during PDF processing: {e}")
-            return "Failed to process PDF content."
-
-    @staticmethod
-    def process_video_document(file_path: str) -> str:
-        """
-        Pipeline: PySceneDetect -> Whisper -> Gemini for keyframes -> Concat.
-        """
-        print(f"Starting Video processing pipeline for: {file_path}")
-
-        # 1. Split scenes and get keyframes
-        splitter = VideoSceneSplitter()
-        scenes = splitter.split_scenes(file_path)
-
-        # 2. Extract audio from video
-        audio_path = file_path
-        asr = WhisperASR()
-        transcript = asr.transcribe_audio(audio_path)
-
-        # 3. Loop through scenes, send keyframe to Gemini Vision API to get description
-        print("Extracting insights from video keyframes...")
-        scene_descriptions = {}
-        for scene in scenes:
-            frame_path = scene.get("keyframe_path")
-            if os.path.exists(frame_path):
-                desc = gemini_client.describe_image(
-                    image_path=frame_path,
-                    prompt="Describe the content of this presentation slide or video frame accurately.",
-                )
-                scene_descriptions[scene["scene_id"]] = desc
-            else:
-                scene_descriptions[scene["scene_id"]] = "No keyframe extracted."
-
-        # 4. Construct the final document string mapping timestamps to text and descriptions
-        final_document = []
-        for t in transcript:
-            line = f"[{t['start']} - {t['end']}] Transcript: {t['text']}"
-            final_document.append(line)
-
-        print("Video processing completed successfully.")
-        return "\n".join(final_document)
+    return "\n".join(final_text)
