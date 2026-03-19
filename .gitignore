@@ -24,20 +24,9 @@ pip-delete-this-directory.txt
 # ==========================================
 # Ignore files uploaded by user (PDF, Video, Images) inside backend
 backend/data/uploads/*
-# Ignore files containing weights/model (YOLO .pt, Whisper, LLM caches) inside backend
-backend/data/weights/*
-*.pt
-*.pth
-*.h5
-*.bin
-*.safetensors
-*.onnx
-.huggingface/
-.whisper/
 
 # Keep the empty folders intact so that the project structure remains unchanged when cloned
 !backend/data/uploads/.gitkeep
-!backend/data/weights/.gitkeep
 
 # ==========================================
 # 4. LOGS & DATABASES
@@ -69,3 +58,6 @@ Thumbs.db
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Docker patch
+docker-compose.override.yml

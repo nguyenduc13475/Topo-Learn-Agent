@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     # AI API Keys
     GEMINI_API_KEY: str
 
+    # S3 Storage (AWS / Cloudflare R2 / MinIO)
+    S3_ENDPOINT_URL: str
+    S3_ACCESS_KEY: str
+    S3_SECRET_KEY: str
+    S3_BUCKET_NAME: str
+    S3_PUBLIC_DOMAIN: str
+
     # Security
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080

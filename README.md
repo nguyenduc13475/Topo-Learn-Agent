@@ -1,130 +1,134 @@
-PROJECT STRUCTURE:
+# 🧠 Topo-Learn Agent
 
-backend/
-├── app/
-│   ├── api/                    # Chứa các Router/Endpoints của FastAPI
-│   │   ├── dependencies.py     # Các hàm inject dependency (VD: get_db, get_current_user)
-│   │   ├── v1/
-│   │   │   ├── auth.py         # Đăng nhập, đăng ký
-│   │   │   ├── document.py     # API upload PDF/Video
-│   │   │   ├── graph.py        # API truy vấn Knowledge Graph
-│   │   │   ├── quiz.py         # API lấy và nộp bài Quiz
-│   │   │   └── review.py       # API tính toán SM-2, lịch ôn tập
-│   │   └── router.py           # Gom tất cả router v1 lại
-│   ├── core/                   # Cấu hình lõi của ứng dụng
-│   │   ├── config.py           # Load biến môi trường từ .env (Pydantic BaseSettings)
-│   │   ├── exceptions.py       # Custom exception (ItemNotFound, Unauthorized...)
-│   │   └── security.py         # Hash password, mã hóa JWT token
-│   ├── db/                     # Kết nối cơ sở dữ liệu
-│   │   ├── postgres.py         # Sessionmaker cho PostgreSQL (SQLAlchemy)
-│   │   └── neo4j.py            # Driver kết nối cho Neo4j
-│   ├── models/                 # SQLAlchemy Models (Định nghĩa bảng trong Postgres)
-│   │   ├── user.py
-│   │   ├── document.py
-│   │   └── sm2_progress.py
-│   ├── schemas/                # Pydantic Models (Validate input/output API)
-│   │   ├── document_schema.py
-│   │   ├── quiz_schema.py
-│   │   └── graph_schema.py
-│   ├── services/               # Nơi chứa toàn bộ Business Logic (không gọi trực tiếp ở API)
-│   │   ├── ingestion_svc.py    # Logic chia nhỏ file, bóc tách text
-│   │   ├── graph_svc.py        # Logic tạo Node, tìm Dependency, Topological sort
-│   │   ├── sm2_svc.py          # Implement thuật toán SuperMemo-2
-│   │   ├── recommendation_svc.py # Implement tính năng gợi ý concept tiếp theo nên học
-│   │   └── tutor_svc.py        # Logic chấm điểm, giải thích lỗi sai
-│   └── ai_modules/             # Các module AI phục vụ cho Services
-│       ├── vision/             
-│       │   ├── yolo_layout.py  # Load weights và inference YOLOv8
-│       │   └── table_tf.py     # Chạy Table Transformer
-│       ├── audio/
-│       │   ├── whisper_asr.py  # Chạy Whisper small
-│       │   └── scene_split.py  # Chạy PySceneDetect
-│       └── llm/
-│           ├── gemini_client.py# Wrapper để gọi Gemini 1.5 API (Structured Output)
-│           └── prompts.py      # Lưu trữ toàn bộ System Prompts dưới dạng string/template
-├── data/                       # Thư mục chứa dữ liệu tĩnh (Sẽ ignore các file lớn)
-│   ├── uploads/                # File PDF/Video user upload (trong môi trường dev)
-│   └── weights/                # Chứa file .pt của YOLO, model của Whisper
-├── tests/                      # Thư mục viết Unit Test (Pytest)
-│   ├── conftest.py             # Fixtures cho pytest
-│   ├── test_api/               # Test các endpoint
-│   └── test_services/          # Test logic
-├── scripts/                    # Thư mục script
-│   ├── train_yolo.py           # Train YOLO
-│   └── download_models.py      # Download YOLO
-├── .env.example                # File mẫu chứa tên các biến môi trường
-├── .env                        # File thật chứa tên các biến môi trường
-├── main.py                     # Entry point khởi chạy FastAPI app
-├── pyproject.toml              # Quản lý dependencies (nếu dùng Poetry, hoặc dùng requirements.txt)
-└── requirements.txt            # Danh sách thư viện (nếu dùng pip)
+<p align="left">
+  <img src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Neo4j-018BFF?style=for-the-badge&logo=neo4j&logoColor=white" alt="Neo4j" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
+</p>
 
-frontend/src/
-├── app/                          # Next.js App Router (Chỉ chứa Routing và Page/Layout)
-│   ├── (auth)/                   # Route group cho đăng nhập/đăng ký (không có sidebar)
-│   │   ├── login/page.tsx
-│   │   └── register/page.tsx
-│   ├── (dashboard)/              # Route group cho app chính (có Sidebar & Header)
-│   │   ├── layout.tsx            # Chứa Sidebar (Tiến trình học) và Topbar
-│   │   ├── page.tsx              # Trang chủ Dashboard (Tổng quan tiến trình SM-2)
-│   │   ├── documents/            # Quản lý tài liệu (Upload, List)
-│   │   │   └── page.tsx
-│   │   ├── graph/[docId]/        # Vẽ Knowledge Graph cho từng Document
-│   │   │   └── page.tsx
-│   │   ├── learn/[conceptId]/    # Trang học Concept (Định nghĩa, Video, AI Chat)
-│   │   │   └── page.tsx
-│   │   └── quiz/[conceptId]/     # Trang làm bài Quiz sinh bởi Gemini
-│   │       └── page.tsx
-│   ├── globals.css               # Đã có
-│   └── layout.tsx                # Root layout (Provider, Font, Toast)
-│
-├── features/                     # CHÌA KHÓA SCALING: Chia component & logic theo nghiệp vụ
-│   ├── auth/                     # Tính năng xác thực
-│   │   ├── components/           # VD: LoginForm, RegisterForm
-│   │   └── api/                  # VD: login() gọi API backend
-│   ├── document-upload/          # Tính năng xử lý tài liệu
-│   │   ├── components/           # VD: Dropzone, UploadProgress, DocumentCard
-│   │   └── api/                  # VD: uploadFile(), getDocuments()
-│   ├── knowledge-graph/          # Tính năng đồ thị tri thức
-│   │   ├── components/           # VD: FlowCanvas (dùng React Flow vẽ Node/Edge)
-│   │   └── hooks/                # VD: useGraphData()
-│   ├── learning/                 # Tính năng hiển thị bài học và Chat với Tutor
-│   │   ├── components/           # VD: ConceptViewer, TutorChatBox, MarkdownRenderer
-│   │   └── api/                  # VD: getConceptContext()
-│   └── quiz-review/              # Tính năng trắc nghiệm và SM-2
-│       ├── components/           # VD: MultipleChoiceOption, QuizResult, ForgettingCurveChart
-│       └── hooks/                # VD: useCalculateSM2()
-│
-├── components/                   # Chứa các component UI dùng chung (Dumb Components)
-│   ├── ui/                       # Nơi chứa TẤT CẢ components của Shadcn UI (Button, Card, Dialog...)
-│   ├── layout/                   # UI cấu trúc trang (Sidebar, Navbar, UserDropdown)
-│   └── shared/                   # Các UI nhỏ tự viết dùng nhiều nơi (LoadingSpinner, EmptyState)
-│
-├── lib/                          # Các hàm tiện ích, cấu hình
-│   ├── api-client.ts             # Cấu hình Axios/Fetch instance (đính kèm JWT Token)
-│   ├── utils.ts                  # Đã có (cn tailwind)
-│   └── sm2-helpers.ts            # (Tùy chọn) Logic tính ngày ôn tập ở Frontend nếu cần hiển thị
-│
-├── hooks/                        # Custom Hooks dùng chung toàn app
-│   ├── use-debounce.ts
-│   └── use-auth.ts               # Hook quản lý JWT token và phiên đăng nhập
-│
-├── store/                        # Global State (Zustand hoặc Redux)
-│   ├── useUIStore.ts             # Quản lý trạng thái đóng/mở Sidebar, Theme
-│   └── useLearnStore.ts          # Quản lý tiến trình học hiện tại (Concept đang học)
-│
-└── types/                        # Định nghĩa TypeScript Interfaces đồng bộ với Schema của FastAPI
-    ├── document.d.ts
-    ├── graph.d.ts
-    └── quiz.d.ts
+**Topo-Learn Agent** is an Intelligent Learning System designed to transform static academic documents and video lectures into interactive, dynamic learning experiences. By leveraging Large Language Models (Google Gemini), Knowledge Graphs (Neo4j), and Spaced Repetition algorithms (SM-2), it extracts core concepts, maps their dependencies, and creates personalized study paths.
 
-.gitignore                      # Bỏ qua __pycache__, venv, data/uploads, file .env
-docker-compose.yml              # Script để spin-up nhanh PostgreSQL và Neo4j
-README.md                       # Giới thiệu kiến trúc, cách cài đặt, cách chạy lệnh
+Developed by **Nguyễn Văn Đức**.
 
+---
 
-Tại sao lại chọn cấu trúc này (frontend)?
-Giảm tải cho app/: Thư mục app/ rất dễ bị lộn xộn nếu bạn nhét cả Component và Logic vào đó. Với cấu trúc này, các file page.tsx sẽ rất sạch, chỉ làm nhiệm vụ lấy params từ URL và gọi component từ thư mục features/ ra để render.
+## ✨ Key Features
 
-Sức mạnh của thư mục features/: Khi bạn cần sửa luồng làm bài Quiz, bạn chỉ cần vào src/features/quiz-review/. Tất cả API calls, Hooks, và UI components của Quiz đều nằm gom lại một chỗ. Điều này giúp hệ thống không bị "rối rắm" khi dự án lớn lên.
+- **📄 Smart Multimodal Ingestion:** Upload PDFs and Video lectures (MP4). The system automatically parses text using Docling and transcribes audio using Faster-Whisper.
+- **🕸️ Automated Knowledge Graphs:** Uses AI to extract key concepts and determine their prerequisite dependencies, visualizing them as an interactive Directed Acyclic Graph (DAG) via React Flow.
+- **🤖 Context-Aware AI Tutor:** Chat with an AI assistant powered by Gemini 1.5 Pro that understands the specific document context and concept you are currently studying.
+- **📝 Dynamic Quiz Generation:** Automatically generates targeted multiple-choice questions to test your understanding of specific concepts.
+- **🧠 Spaced Repetition (SM-2):** Tracks your quiz performance and calculates the optimal time to review concepts, ensuring long-term memory retention.
+- **⚡ Real-Time Processing:** Built with a distributed Celery worker architecture and WebSocket connections to provide real-time status updates on document parsing and graph building.
 
-Phân tách Rõ ràng (Separation of Concerns): components/ui/ chỉ chứa các nút bấm, thẻ bài (Shadcn). Nó không biết API là gì. Việc gọi API là việc của features/.
+---
+
+## 🛠️ Technology Stack Detail
+
+**Frontend**
+
+- **Framework:** Next.js 15 (React 19)
+- **Styling:** Tailwind CSS v4, Shadcn UI
+- **State Management:** Zustand
+- **Visualization:** React Flow (XYFlow), Dagre (DAG layouting)
+
+**Backend & ML**
+
+- **Framework:** FastAPI (Python 3.10)
+- **AI/LLM:** Google Gemini API (1.5 Flash for extraction, 1.5 Pro for tutoring)
+- **ML Libraries:** Faster-Whisper, Docling, OpenCV, PyTorch
+- **Task Queue:** Celery
+
+**Databases & Infrastructure**
+
+- **Relational DB:** PostgreSQL 15
+- **Graph DB:** Neo4j 5.12
+- **Message Broker / Cache:** Redis 7
+- **Containerization:** Docker & Docker Compose
+- **Proxy:** Nginx
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose installed.
+- _(Optional but recommended)_ NVIDIA GPU with CUDA toolkit installed for faster ML processing (Whisper/Docling).
+- A Google Gemini API Key.
+
+### Installation
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone <your-repo-url>
+   cd topo-learn-agent
+   ```
+
+2. **Configure Environment Variables:**
+   Navigate to the `backend` directory and copy the example environment file:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+   Open `backend/.env` and fill in your actual credentials, most importantly your `GEMINI_API_KEY` and a secure `SECRET_KEY`.
+
+3. **Build and start the application:**
+   From the root directory, run:
+
+   ```bash
+   docker-compose --env-file backend/.env up --build
+   ```
+
+4. **Access the application:**
+   - **Frontend (Web App):** `http://localhost:3000`
+   - **Backend API Docs:** `http://localhost:8000/docs`
+   - **Neo4j Browser:** `http://localhost:7474`
+
+---
+
+## 📂 Project Structure
+
+```text
+.
+├── backend/                   # FastAPI Server & AI Workers
+│   ├── app/
+│   │   ├── ai_modules/        # Gemini integration and prompt engineering
+│   │   ├── api/               # REST API & WebSocket endpoints
+│   │   ├── core/              # Config, security, and Celery setup
+│   │   ├── db/                # PostgreSQL and Neo4j connections
+│   │   ├── models/            # SQLAlchemy database models
+│   │   ├── schemas/           # Pydantic validation schemas
+│   │   └── services/          # Business logic, SM-2, and ML processing
+│   ├── data/uploads/          # Local storage fallback for files
+│   ├── worker.Dockerfile      # GPU-enabled image for Celery workers
+│   └── Dockerfile             # Standard image for the FastAPI server
+├── frontend/                  # Next.js Web Application
+│   ├── src/
+│   │   ├── app/               # Next.js App Router pages
+│   │   ├── components/        # Reusable UI components (Shadcn)
+│   │   ├── features/          # Domain-specific components (Auth, Graph, Quiz)
+│   │   ├── hooks/             # Custom React hooks (Auth, WebSockets, Translation)
+│   │   ├── lib/               # Utility functions and API client
+│   │   └── store/             # Zustand state management
+│   └── Dockerfile             # Next.js production builder image
+├── docker-compose.yml         # Local development orchestration
+├── docker-compose.prod.yml    # Production orchestration with Nginx
+└── nginx.conf                 # Reverse proxy configuration
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License. See the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
+
+Copyright (c) 2026 Nguyễn Văn Đức
