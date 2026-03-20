@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, FileText, PlayCircle } from "lucide-react";
+import { BookOpen, FileText, PlayCircle, ZoomIn, ZoomOut } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranslation } from "@/hooks/use-translation";
 import { Concept } from "@/types/graph";
@@ -19,6 +19,7 @@ interface ConceptViewerProps {
 export function ConceptViewer({ concept }: ConceptViewerProps) {
   const { t } = useTranslation();
   const [numPages, setNumPages] = useState<number>();
+  const [scale, setScale] = useState(1); // <-- ADDED: Zoom state
 
   // Ensure relative media URLs hit the backend properly in all environments
   const getMediaUrl = (url: string) => {
@@ -80,6 +81,29 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
                   <span className="text-sm font-semibold text-foreground tracking-wide">
                     Original Document
                   </span>
+
+                  {/* <-- ADDED: Zoom Controls for PDF --> */}
+                  {concept.file_type !== "video" && (
+                    <div className="ml-auto flex items-center gap-1">
+                      <button
+                        onClick={() => setScale((s) => Math.max(0.4, s - 0.2))}
+                        className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors"
+                        title="Zoom Out"
+                      >
+                        <ZoomOut className="w-4 h-4 text-foreground" />
+                      </button>
+                      <span className="text-xs text-foreground font-medium w-10 text-center">
+                        {Math.round(scale * 100)}%
+                      </span>
+                      <button
+                        onClick={() => setScale((s) => Math.min(3, s + 0.2))}
+                        className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded transition-colors"
+                        title="Zoom In"
+                      >
+                        <ZoomIn className="w-4 h-4 text-foreground" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {concept.file_type === "video" ? (
@@ -134,6 +158,7 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
                                   renderAnnotationLayer={false}
                                   className="shadow-lg bg-white"
                                   width={800}
+                                  scale={scale} // <-- ADDED: Passes zoom scale to react-pdf
                                   // Auto-scroll to this specific page the moment it finishes drawing
                                   onLoadSuccess={
                                     isTarget
