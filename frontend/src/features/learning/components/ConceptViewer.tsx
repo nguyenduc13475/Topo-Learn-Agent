@@ -96,35 +96,70 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
                   />
                 ) : (
                   // Canvas Rendering instead of <object>
-                  <div className="relative flex justify-center bg-zinc-100 overflow-auto max-h-150 p-4 rounded-md">
-                    <Document
-                      file={getMediaUrl(concept.file_url)}
-                      onLoadSuccess={onDocumentLoadSuccess}
-                      loading={
-                        <div className="p-8 text-muted-foreground animate-pulse">
-                          Loading PDF...
-                        </div>
-                      }
-                      error={
-                        <div className="p-8 text-destructive text-center">
-                          Failed to load PDF. Check CORS settings on your bucket
-                          or backend.
-                        </div>
-                      }
-                    >
-                      <Page
-                        // Fallback to page 1 if targetPage exceeds numPages to prevent crashing
-                        pageNumber={
-                          numPages && targetPage > numPages ? 1 : targetPage
-                        }
-                        renderTextLayer={true}
-                        renderAnnotationLayer={false}
-                        className="shadow-lg"
-                        width={800}
-                      />
-                    </Document>
+                  <div className="relative rounded-md overflow-hidden border border-border shadow-inner">
+                    {/* Scrollable Container (Make sure scroll-smooth is here) */}
+                    <div className="bg-zinc-100 overflow-auto max-h-150 p-4 scroll-smooth">
+                      {/* Safe Centering Wrapper */}
+                      <div className="w-max mx-auto">
+                        <Document
+                          file={getMediaUrl(concept.file_url)}
+                          onLoadSuccess={onDocumentLoadSuccess}
+                          loading={
+                            <div className="p-8 text-muted-foreground animate-pulse flex items-center justify-center min-w-75">
+                              Loading PDF...
+                            </div>
+                          }
+                          error={
+                            <div className="p-8 text-destructive text-center min-w-75">
+                              Failed to load PDF. Check CORS settings on your
+                              bucket or backend.
+                            </div>
+                          }
+                        >
+                          {/* Loop through all pages and render them stacked vertically */}
+                          {Array.from(new Array(numPages || 0), (_, index) => {
+                            const pageNum = index + 1;
+                            const isTarget = pageNum === targetPage;
 
-                    {/* The floating page indicator using numPages */}
+                            return (
+                              <div
+                                key={`page-${pageNum}`}
+                                id={`pdf-page-${pageNum}`}
+                                // Highlight the target page so the user knows exactly where the concept is
+                                className={`mb-6 transition-all ${isTarget ? "ring-4 ring-primary ring-offset-4 rounded-sm" : ""}`}
+                              >
+                                <Page
+                                  pageNumber={pageNum}
+                                  renderTextLayer={true}
+                                  renderAnnotationLayer={false}
+                                  className="shadow-lg bg-white"
+                                  width={800}
+                                  // Auto-scroll to this specific page the moment it finishes drawing
+                                  onLoadSuccess={
+                                    isTarget
+                                      ? () => {
+                                          setTimeout(() => {
+                                            document
+                                              .getElementById(
+                                                `pdf-page-${pageNum}`,
+                                              )
+                                              ?.scrollIntoView({
+                                                behavior: "smooth",
+                                                block: "start",
+                                              });
+                                          }, 200); // Tiny delay ensures the DOM is ready to scroll
+                                        }
+                                      : undefined
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
+                        </Document>
+                      </div>
+                    </div>
+
+                    {/* Fixed Page Indicator (Placed OUTSIDE the scrolling div so it stays in the corner) */}
                     {numPages && (
                       <div className="absolute bottom-4 right-6 bg-foreground/80 text-background px-3 py-1.5 rounded-md text-xs font-semibold backdrop-blur-sm shadow-md pointer-events-none">
                         Page {targetPage > numPages ? 1 : targetPage} of{" "}
