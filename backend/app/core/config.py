@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # AI API Keys
     GEMINI_API_KEY: str
 
+    LLM_MODEL_DOCS: str = "gemini-2.5-flash-lite"
+    LLM_MODEL_TUTOR: str = "gemini-3.1-flash-lite-preview"
+
     # S3 Storage (AWS / Cloudflare R2 / MinIO)
     S3_ENDPOINT_URL: str
     S3_ACCESS_KEY: str

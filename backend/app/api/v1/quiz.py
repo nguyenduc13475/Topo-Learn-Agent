@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timedelta, timezone
 from typing import List
 
@@ -9,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.ai_modules.llm.gemini_client import gemini_client
 from app.api.dependencies import get_current_user, get_db
+from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.models.document import Concept, Document
 from app.models.sm2_progress import SM2Progress
@@ -212,7 +212,7 @@ def chat_with_tutor(
         # Hardcode the premium model for Chat/Tutor interactions to ensure the
         # highest reasoning quality
         response = gemini_client.client.models.generate_content(
-            model=os.getenv("LLM_MODEL_TUTOR", "gemini-3.1-flash-lite-preview"),
+            model=settings.LLM_MODEL_TUTOR,
             contents=formatted_contents,
             config=config,
         )

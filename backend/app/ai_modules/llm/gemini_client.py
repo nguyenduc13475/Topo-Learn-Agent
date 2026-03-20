@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import time
 from typing import Any, Type
@@ -14,7 +13,7 @@ from app.core.config import settings
 class GeminiClient:
     def __init__(self):
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        self.model_name = os.getenv("LLM_MODEL_DOCS", "gemini-2.5-flash-lite")
+        self.model_name = settings.LLM_MODEL_DOCS
 
     # Retry with exponential backoff: Wait 2^x * 1 seconds between each retry,
     # up to 10s, max 5 attempts
