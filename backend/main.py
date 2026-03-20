@@ -72,6 +72,8 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    # Accept all IDs generated from Lightning AI
+    allow_origin_regex=r"https://.*\.cloudspaces\.litng\.ai",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
