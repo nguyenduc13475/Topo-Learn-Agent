@@ -29,19 +29,29 @@ class GeminiClient:
         Send a prompt and force the model to return strictly validated JSON
         using Pydantic schemas.
         """
+        is_gemma = "gemma" in self.model_name.lower()
 
-        # Gemma rejects the system_instruction config. Merge it into the prompt.
-        if "gemma" in self.model_name.lower() and system_instruction:
+        # Gemma rejects system instructions. Merge it into the prompt.
+        if is_gemma and system_instruction:
             prompt = f"System Instruction: {system_instruction}\n\nTask: {prompt}"
             system_instruction = None
 
         try:
-            config = types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=response_schema,  # Force strict JSON adherence
-                system_instruction=system_instruction,
-                temperature=0.1,  # Low temperature for analytical extraction
-            )
+            if is_gemma:
+                # Gemma rejects strict JSON API configs. We rely entirely on the
+                # prompt instructions and our regex fallback below.
+                config = types.GenerateContentConfig(
+                    temperature=0.1,
+                )
+            else:
+                # Native Gemini Structured Output
+                config = types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=response_schema,
+                    system_instruction=system_instruction,
+                    temperature=0.1,
+                )
+
             response = self.client.models.generate_content(
                 model=self.model_name, contents=prompt, config=config
             )
