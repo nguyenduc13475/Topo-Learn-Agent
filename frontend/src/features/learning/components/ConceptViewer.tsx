@@ -4,6 +4,13 @@ import { BookOpen, FileText, PlayCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranslation } from "@/hooks/use-translation";
 import { Concept } from "@/types/graph";
+import { useState } from "react";
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/esm/Page/AnnotationLayer.css";
+import "react-pdf/dist/esm/Page/TextLayer.css";
+
+// Set up the PDF.js worker securely via CDN to avoid Next.js Webpack headaches
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface ConceptViewerProps {
   concept: Concept;
@@ -11,6 +18,7 @@ interface ConceptViewerProps {
 
 export function ConceptViewer({ concept }: ConceptViewerProps) {
   const { t } = useTranslation();
+  const [numPages, setNumPages] = useState<number>();
 
   // Ensure relative media URLs hit the backend properly in all environments
   const getMediaUrl = (url: string) => {
@@ -22,6 +30,14 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
     // Simply return the absolute path. Next.js/Nginx will route it to the backend.
     return formattedUrl;
   };
+
+  // Extract the page number from the AI's context index (e.g., "Page 12")
+  const pageMatch = concept.context_index?.match(/page\s*(\d+)/i);
+  const targetPage = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+
+  function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
+    setNumPages(numPages);
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -79,32 +95,43 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
                     className="w-full max-h-125 object-contain bg-black"
                   />
                 ) : (
-                  <object
-                    data={`${getMediaUrl(concept.file_url)}#toolbar=0${
-                      concept.context_index?.match(/page\s*(\d+)/i)
-                        ? `&page=${concept.context_index.match(/page\s*(\d+)/i)![1]}`
-                        : ""
-                    }`}
-                    type="application/pdf"
-                    className="w-full h-150 border-none bg-white rounded-md"
-                    title="PDF Viewer"
-                  >
-                    {/* Fallback UI if the browser entirely blocks inline PDFs */}
-                    <div className="flex flex-col items-center justify-center h-full bg-secondary/20 space-y-4 p-8 text-center border border-dashed border-border rounded-md">
-                      <p className="text-muted-foreground">
-                        Your browser or workspace environment restricts inline
-                        PDF rendering.
-                      </p>
-                      <a
-                        href={getMediaUrl(concept.file_url!)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90 transition-colors"
-                      >
-                        Open PDF in New Tab
-                      </a>
-                    </div>
-                  </object>
+                  // Canvas Rendering instead of <object>
+                  <div className="relative flex justify-center bg-zinc-100 overflow-auto max-h-150 p-4 rounded-md">
+                    <Document
+                      file={getMediaUrl(concept.file_url)}
+                      onLoadSuccess={onDocumentLoadSuccess}
+                      loading={
+                        <div className="p-8 text-muted-foreground animate-pulse">
+                          Loading PDF...
+                        </div>
+                      }
+                      error={
+                        <div className="p-8 text-destructive text-center">
+                          Failed to load PDF. Check CORS settings on your bucket
+                          or backend.
+                        </div>
+                      }
+                    >
+                      <Page
+                        // Fallback to page 1 if targetPage exceeds numPages to prevent crashing
+                        pageNumber={
+                          numPages && targetPage > numPages ? 1 : targetPage
+                        }
+                        renderTextLayer={true}
+                        renderAnnotationLayer={false}
+                        className="shadow-lg"
+                        width={800}
+                      />
+                    </Document>
+
+                    {/* The floating page indicator using numPages */}
+                    {numPages && (
+                      <div className="absolute bottom-4 right-6 bg-foreground/80 text-background px-3 py-1.5 rounded-md text-xs font-semibold backdrop-blur-sm shadow-md pointer-events-none">
+                        Page {targetPage > numPages ? 1 : targetPage} of{" "}
+                        {numPages}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
