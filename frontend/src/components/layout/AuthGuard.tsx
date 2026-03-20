@@ -3,56 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { apiClient } from "@/lib/api-client";
-
-interface UserProfile {
-  id: number;
-  email: string;
-  full_name: string;
-}
-
-interface AuthState {
-  token: string | null;
-  isAuthenticated: boolean;
-  user: UserProfile | null;
-  setToken: (token: string) => void;
-  fetchUser: () => Promise<void>;
-  logout: () => void;
-}
-
-export const useAuth = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      token: null,
-      isAuthenticated: false,
-      user: null,
-
-      setToken: (token: string) => {
-        set({ token, isAuthenticated: true });
-        get().fetchUser();
-      },
-
-      fetchUser: async () => {
-        try {
-          const userData = await apiClient<UserProfile>("/auth/me");
-          set({ user: userData });
-        } catch (error) {
-          console.error("[AuthStore] Failed to fetch user profile", error);
-          get().logout();
-        }
-      },
-
-      logout: () => {
-        set({ token: null, isAuthenticated: false, user: null });
-      },
-    }),
-    {
-      name: "topo-auth-storage",
-    },
-  ),
-);
+import { useAuth } from "@/hooks/use-auth";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { token, user, fetchUser } = useAuth();
