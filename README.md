@@ -41,7 +41,7 @@ Developed by **Nguyễn Văn Đức**.
 **Backend & ML**
 
 - **Framework:** FastAPI (Python 3.10)
-- **AI/LLM:** Google Gemini API (1.5 Flash for extraction, 1.5 Pro for tutoring)
+- **AI/LLM:** Google Gemini API (2.5 Flash Lite for extraction, 3.1 Flash Lite Preview for tutoring)
 - **ML Libraries:** Faster-Whisper, Docling, OpenCV, PyTorch
 - **Task Queue:** Celery
 

@@ -211,7 +211,9 @@ def chat_with_tutor(
         # Hardcode the premium model for Chat/Tutor interactions to ensure the
         # highest reasoning quality
         response = gemini_client.client.models.generate_content(
-            model="gemini-1.5-pro", contents=formatted_contents, config=config
+            model="gemini-3.1-flash-lite-preview",
+            contents=formatted_contents,
+            config=config,
         )
         return {"response": response.text}
     except Exception as e:
