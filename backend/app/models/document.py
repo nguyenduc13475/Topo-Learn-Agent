@@ -16,6 +16,7 @@ class Document(Base):
     title = Column(String(255), nullable=False)
     file_type = Column(String(50))
     content_text = Column(Text, nullable=True)
+    file_url = Column(String, nullable=True)
 
     # Ingestion Status
     status = Column(String(50), default="processing")
