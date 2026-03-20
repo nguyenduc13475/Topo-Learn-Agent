@@ -29,6 +29,12 @@ class GeminiClient:
         Send a prompt and force the model to return strictly validated JSON
         using Pydantic schemas.
         """
+
+        # Gemma rejects the system_instruction config. Merge it into the prompt.
+        if "gemma" in self.model_name.lower() and system_instruction:
+            prompt = f"System Instruction: {system_instruction}\n\nTask: {prompt}"
+            system_instruction = None
+
         try:
             config = types.GenerateContentConfig(
                 response_mime_type="application/json",
