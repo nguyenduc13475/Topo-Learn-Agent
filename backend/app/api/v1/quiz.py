@@ -86,12 +86,12 @@ def submit_quiz(
         )
         db.add(progress)
 
-    # Calculate SM-2
+    # Calculate SM-2 with safe fallbacks for uncommitted new records
     sm2_results = calculate_sm2(
         quality_response=score,
-        repetitions=progress.repetitions,
-        previous_interval=progress.interval,
-        previous_ef=progress.easiness_factor,
+        repetitions=progress.repetitions or 0,
+        previous_interval=progress.interval or 1,
+        previous_ef=progress.easiness_factor or 2.5,
     )
 
     # Update DB

@@ -44,13 +44,13 @@ def update_review_progress(
         progress = SM2Progress(user_id=current_user["user_id"], concept_id=concept_id)
         db.add(progress)
 
-    # Calculate new SM-2 parameters
+    # Calculate new SM-2 parameters with safe fallbacks
     try:
         sm2_results = calculate_sm2(
             quality_response=payload.quality_score,
-            repetitions=progress.repetitions,
-            previous_interval=progress.interval,
-            previous_ef=progress.easiness_factor,
+            repetitions=progress.repetitions or 0,
+            previous_interval=progress.interval or 1,
+            previous_ef=progress.easiness_factor or 2.5,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
