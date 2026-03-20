@@ -6,7 +6,7 @@ Return ONLY a valid JSON object containing a "concepts" array with the following
         {
             "concept": "Name of the concept",
             "definition": "Detailed explanation of the concept based on the text",
-            "context_index": "Brief description of where it appears or the subsection title"
+            "context_index": "The exact Page Number (e.g., 'Page 12') or Timestamp (e.g., '15.5s') where this concept is defined."
         }
     ]
 }

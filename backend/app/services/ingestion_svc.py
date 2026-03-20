@@ -189,22 +189,34 @@ def _process_pdf_logic(file_path: str) -> str:
     doc = conv_result.document
 
     document_flow = []
+    current_page = None
 
     # 3. Process items in reading order & parallelize Vision calls
     with tempfile.TemporaryDirectory() as temp_dir:
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             for item, _ in doc.iterate_items():
-                # Duck-typing is safer than checking type(item).__name__ across
-                # Docling versions
+                # CHECK IF THE PAGE CHANGED
+                page_marker = ""
+                if hasattr(item, "prov") and item.prov and len(item.prov) > 0:
+                    page_no = item.prov[0].page_no
+                    if page_no != current_page:
+                        current_page = page_no
+                        # Only inject a clean header when the page turns
+                        page_marker = f"\n\n--- [PAGE {current_page}] ---\n\n"
+
+                # Duck-typing is safer than checking type(item).__name__ across Docling versions
                 if hasattr(item, "get_image") and item.label == "picture":
+                    # If an image is the first item on a new page, append the page marker first
+                    if page_marker:
+                        document_flow.append({"type": "text", "content": page_marker})
+
                     try:
                         pil_img = item.get_image(doc)
                         if pil_img:
                             img_path = os.path.join(temp_dir, f"img_{id(item)}.jpg")
                             pil_img.convert("RGB").save(img_path, format="JPEG")
 
-                            # Enhanced Prompt: Force extraction of internal
-                            # text/diagram labels
+                            # Enhanced Prompt: Force extraction of internal text/diagram labels
                             prompt = (
                                 "Analyze this academic image, chart, or diagram. "
                                 "Provide a highly detailed explanation of its core concepts. "
@@ -221,17 +233,22 @@ def _process_pdf_logic(file_path: str) -> str:
                     document_flow.append(
                         {
                             "type": "text",
-                            "content": f"\n\n{item.export_to_markdown()}\n\n",
+                            "content": f"{page_marker}\n\n{item.export_to_markdown()}\n\n",
                         }
                     )
                 else:
                     # Standard text, paragraphs, and headings
                     if hasattr(item, "export_to_markdown"):
                         document_flow.append(
-                            {"type": "text", "content": item.export_to_markdown()}
+                            {
+                                "type": "text",
+                                "content": f"{page_marker}{item.export_to_markdown()}",
+                            }
                         )
                     elif hasattr(item, "text"):
-                        document_flow.append({"type": "text", "content": item.text})
+                        document_flow.append(
+                            {"type": "text", "content": f"{page_marker}{item.text}"}
+                        )
 
             # 4. Resolve futures and assemble the final markdown. MOVED INSIDE
             # the ThreadPool/TempDir block to prevent FileNotFoundError race

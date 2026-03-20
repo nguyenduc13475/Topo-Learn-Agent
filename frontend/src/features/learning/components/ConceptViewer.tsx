@@ -68,14 +68,24 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
 
                 {concept.file_type === "video" ? (
                   <video
-                    src={getMediaUrl(concept.file_url)}
+                    // Regex searches the context_index for a timestamp like "15.5s" and jumps to it
+                    src={`${getMediaUrl(concept.file_url)}${
+                      concept.context_index?.match(/(\d+(\.\d+)?)\s*s/i)
+                        ? `#t=${concept.context_index.match(/(\d+(\.\d+)?)\s*s/i)![1]}`
+                        : ""
+                    }`}
                     controls
                     controlsList="nodownload"
                     className="w-full max-h-125 object-contain bg-black"
                   />
                 ) : (
                   <iframe
-                    src={`${getMediaUrl(concept.file_url)}#toolbar=0`}
+                    // Regex extracts the number from "Page 12" and uses the native #page= parameter
+                    src={`${getMediaUrl(concept.file_url)}#toolbar=0${
+                      concept.context_index?.match(/page\s*(\d+)/i)
+                        ? `&page=${concept.context_index.match(/page\s*(\d+)/i)![1]}`
+                        : ""
+                    }`}
                     className="w-full h-150 border-none bg-white"
                     title="PDF Viewer"
                   />
