@@ -16,7 +16,7 @@ export default function DocumentsPage() {
 
   const fetchDocuments = async () => {
     try {
-      const docs = await apiClient<DocumentItem[]>("/documents/");
+      const docs = await apiClient<DocumentItem[]>("/documents");
       setDocuments(docs);
     } catch (error) {
       console.error("Failed to fetch documents", error);

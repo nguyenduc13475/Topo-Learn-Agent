@@ -82,7 +82,7 @@ async def upload_document(
     return {"id": new_doc.id, "title": new_doc.title, "status": new_doc.status}
 
 
-@router.get("/")
+@router.get("")
 def get_documents(
     db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)
 ):
