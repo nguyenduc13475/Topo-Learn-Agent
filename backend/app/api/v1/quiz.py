@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 from typing import List
 
@@ -211,7 +212,7 @@ def chat_with_tutor(
         # Hardcode the premium model for Chat/Tutor interactions to ensure the
         # highest reasoning quality
         response = gemini_client.client.models.generate_content(
-            model="gemini-3.1-flash-lite-preview",
+            model=os.getenv("LLM_MODEL_TUTOR", "gemini-3.1-flash-lite-preview"),
             contents=formatted_contents,
             config=config,
         )
