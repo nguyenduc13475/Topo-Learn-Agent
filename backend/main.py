@@ -1,4 +1,5 @@
 import asyncio
+import mimetypes
 import os
 from contextlib import asynccontextmanager
 
@@ -17,6 +18,10 @@ from app.core.rate_limit import limiter
 from app.db.neo4j import neo4j_conn
 from app.db.postgres import Base, engine
 from app.services.ws_manager import ws_manager
+
+# Explicitly register MIME types so minimal Docker images serve them correctly
+mimetypes.add_type("application/pdf", ".pdf")
+mimetypes.add_type("video/mp4", ".mp4")
 
 # Create all database tables
 print("[Main] Initializing Database Tables...")

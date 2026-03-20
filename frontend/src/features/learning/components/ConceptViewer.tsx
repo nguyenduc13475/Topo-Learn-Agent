@@ -79,16 +79,32 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
                     className="w-full max-h-125 object-contain bg-black"
                   />
                 ) : (
-                  <iframe
-                    // Regex extracts the number from "Page 12" and uses the native #page= parameter
-                    src={`${getMediaUrl(concept.file_url)}#toolbar=0${
+                  <object
+                    data={`${getMediaUrl(concept.file_url)}#toolbar=0${
                       concept.context_index?.match(/page\s*(\d+)/i)
                         ? `&page=${concept.context_index.match(/page\s*(\d+)/i)![1]}`
                         : ""
                     }`}
-                    className="w-full h-150 border-none bg-white"
+                    type="application/pdf"
+                    className="w-full h-150 border-none bg-white rounded-md"
                     title="PDF Viewer"
-                  />
+                  >
+                    {/* Fallback UI if the browser entirely blocks inline PDFs */}
+                    <div className="flex flex-col items-center justify-center h-full bg-secondary/20 space-y-4 p-8 text-center border border-dashed border-border rounded-md">
+                      <p className="text-muted-foreground">
+                        Your browser or workspace environment restricts inline
+                        PDF rendering.
+                      </p>
+                      <a
+                        href={getMediaUrl(concept.file_url!)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90 transition-colors"
+                      >
+                        Open PDF in New Tab
+                      </a>
+                    </div>
+                  </object>
                 )}
               </div>
             )}
