@@ -15,10 +15,12 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
   // Ensure relative media URLs hit the backend properly in all environments
   const getMediaUrl = (url: string) => {
     if (url.startsWith("http")) return url;
-    const baseUrl =
-      process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") ||
-      "http://localhost:8000";
-    return `${baseUrl}${url}`;
+
+    // Ensure the URL starts with a slash to avoid broken relative paths
+    const formattedUrl = url.startsWith("/") ? url : `/${url}`;
+
+    // Simply return the absolute path. Next.js/Nginx will route it to the backend.
+    return formattedUrl;
   };
 
   return (
@@ -50,15 +52,6 @@ export function ConceptViewer({ concept }: ConceptViewerProps) {
       {concept.context_index && (
         <Card className="border-border shadow-none bg-secondary/20">
           <CardContent className="space-y-6 pb-6">
-            <div className="prose prose-neutral dark:prose-invert max-w-none">
-              <h4 className="text-lg font-semibold text-foreground border-b border-border pb-2 mb-4">
-                {t.learning.definition}
-              </h4>
-              <p className="text-muted-foreground leading-relaxed text-lg whitespace-pre-wrap">
-                {concept.definition}
-              </p>
-            </div>
-
             {/* MEDIA PLAYER: Automatically render Video or PDF */}
             {concept.file_url && (
               <div className="mt-8 overflow-hidden rounded-xl border border-border bg-secondary/10 shadow-inner">
